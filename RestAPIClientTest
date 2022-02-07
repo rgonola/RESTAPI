@@ -1,0 +1,65 @@
+/**
+ * @description       : 
+ * @author            : ashok.kothakapu@coxautoinc.com
+ * @group             : 
+ * @last modified on  : 04-29-2021
+ * @last modified by  : ashok.kothakapu@coxautoinc.com
+ * Modifications Log 
+ * Ver   Date         Author                           Modification
+ * 1.0   04-28-2021   ashok.kothakapu@coxautoinc.com   Initial Version
+**/
+@isTest
+private class RestAPIClientTest {
+    private static HttpAPIMockMap httpAPIMockMap;
+    private static Map<String, List<HttpAPIMock>> getRequests = new Map<String, List<HttpAPIMock>>();
+    private static Map<String, List<HttpAPIMock>> postRequests = new Map<String, List<HttpAPIMock>>();
+
+    @isTest
+    static void getRequest_withoutToken_returnsResponse() {
+        getRequests.put('http://test', new List<HttpAPIMock>{buildMock('test response', 200)});
+        HttpAPIMockMap httpAPIMockMap = new HttpAPIMockMap(getRequests, postRequests);
+        Test.setMock(HttpCalloutMock.class, httpAPIMockMap);
+        RestAPIClient.callEndpoint(null, 'GET', 'http://test', false);
+    }
+
+    @isTest
+    static void getRequest_withToken_returnsResponse() {
+        getRequests.put('http://test', new List<HttpAPIMock>{buildMock('test response', 200)});
+        postRequests.put('callout:ODI_OAuth', new List<HttpAPIMock>{buildMock('{"accessToken":"testaccess_token"}', 200)});
+        HttpAPIMockMap httpAPIMockMap = new HttpAPIMockMap(getRequests, postRequests);
+        Test.setMock(HttpCalloutMock.class, httpAPIMockMap);
+        RestAPIClient.callEndpoint(null, 'GET', 'http://test', true);
+    }
+
+    @isTest
+    static void getRequest_whenAuthFails_retryRequest() {
+        getRequests.put('http://test', new List<HttpAPIMock>{buildMock('{"message":"Not Authorized"}', 401), 
+                                            buildMock('test response', 200)});
+        postRequests.put('callout:ODI_OAuth', new List<HttpAPIMock>{buildMock('{"message_token":"testaccess_token"}', 200), buildMock('{"message_token":"testaccess_token"}', 200)});
+        HttpAPIMockMap httpAPIMockMap = new HttpAPIMockMap(getRequests, postRequests);
+        Test.setMock(HttpCalloutMock.class, httpAPIMockMap);
+        RestAPIClient.callEndpoint(null, 'GET', 'http://test', true);
+    }
+
+    @isTest
+    static void postRequest_withoutToken_returnsResponse() {
+        postRequests.put('http://test', new List<HttpAPIMock>{buildMock('test response', 200)});
+        HttpAPIMockMap httpAPIMockMap = new HttpAPIMockMap(getRequests, postRequests);
+        Test.setMock(HttpCalloutMock.class, httpAPIMockMap);
+        RestAPIClient.callEndpoint('{"id":12345}', 'POST', 'http://test', false);
+    }
+
+    @isTest
+    static void postRequest_withAMSToken_returnsResponse() {
+        getRequests.put('http://test', new List<HttpAPIMock>{buildMock('test response', 200)});
+        postRequests.put('callout:AMS_OAuth', new List<HttpAPIMock>{buildMock('{"accessToken":"testaccess_token"}', 200)});
+        HttpAPIMockMap httpAPIMockMap = new HttpAPIMockMap(getRequests, postRequests);
+        Test.setMock(HttpCalloutMock.class, httpAPIMockMap);
+        RestAPIClient.authEndPoint = 'callout:AMS_OAuth';
+        RestAPIClient.callEndpoint('test', 'GET', 'http://test', true);
+    }
+
+    private static HttpAPIMock buildMock(String response, Integer statusCode) {
+        return new HttpAPIMock(response, statusCode);
+    }
+}
