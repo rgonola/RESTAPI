@@ -1,0 +1,124 @@
+/**
+ * @File Name          : RestAPIClient.cls
+ * @Description        : This class can be used for building rest request
+ * @Author             : Raj Gonola 
+ * @Group              : 
+ * @Last Modified By   : 
+ * @Last Modified On   : 05-04-2021
+ * @Modification Log   : 
+ * Ver       Date            Author      		    Modification
+ * 1.0    9/26/2019   Raj Gonola      Initial Version
+ ** Modification Log:
+**/
+public with sharing class RestAPIClient {
+
+    public static String authEndPoint {get;set;}
+
+    public static HttpResponse callEndpoint(String requestBody, String method, String endpoint, Boolean includeToken) {
+    
+        HttpRequest request = new HttpRequest();
+        request.setMethod(method);
+        request.setEndpoint(endpoint);
+        request.setHeader('Content-Type', 'application/json');
+
+        Boolean setTokenFlag = false;
+   
+        if(authEndPoint != null) {
+            setTokenFlag = true;
+        }
+    
+        if(includeToken) {
+           request.setHeader('Authorization', 'Bearer ' + getToken(setTokenFlag));
+        }
+        
+        if(!VFUtil.isEmpty(requestBody)){
+            request.setbody(requestBody);
+        } 
+        request.setTimeout(120000);
+        return getResponse(request, 0);
+    }
+    
+    
+    public static HttpResponse callEndpoint(String requestBody, String method, String endpoint, Map<String, String> headerMap) {
+        HttpRequest request = new HttpRequest();
+        request.setMethod(method);
+        request.setEndpoint(endpoint);
+        request.setHeader('Content-Type', 'application/json');
+        request.setHeader('Accept','application/json');
+        
+        for(String key : headerMap.keySet()){
+            request.setHeader(key, headerMap.get(key));
+        }
+        
+        if(!VFUtil.isEmpty(requestBody)){
+            request.setBody(requestBody);
+        } 
+        request.setTimeout(120000);
+        return getResponse(request, 0);
+    }
+
+    public static String getToken(Boolean refreshToken){
+        Cache.OrgPartition orgCache = Cache.Org.getPartition('local.ODIToken');
+        String token = (String)orgCache.get('AuthToken');
+        if (null == token || refreshToken) {
+            token = refreshToken();
+            if(!VFUtil.isEmpty(token)) {
+                orgCache.put('AuthToken', token);
+            }
+        }       
+        return token;
+    }
+
+    public static String refreshToken(){
+        String oauthToken = null;
+        String oauthEndpoint = 'callout:ODI_OAuth';
+
+        if(authEndPoint != null) {
+            oauthEndpoint = authEndPoint;
+        }
+
+        HttpResponse oAuthres  = callEndpoint(null, 'POST', oauthEndpoint, false);
+
+        if(!VFUtil.isEmpty(oAuthres.getBody())){
+            Map<String, Object> responseMap= (Map<String, Object>)JSON.deserializeUntyped(oAuthres.getBody());
+            if(responseMap.containsKey('accessToken')) {
+                oauthToken = String.valueOf(responseMap.get('accessToken'));
+            }
+        } 
+        
+        return oauthToken;
+    }
+
+    // public static HttpResponse generateToken(String oauthEndpoint){
+    //     //get token from ODI using OAuth2.0 
+    //     String oauthtoken;
+    //     String oauthError;
+	// 	//Oauthtoken = getToken(false);
+    //     //Intialize Rest Request 
+        
+    //     HttpResponse oAuthres = null;
+    //     try {
+    //         oAuthres = RestRequestBuilder.callEndpoint(null, 'POST', oauthEndpoint, false);
+    //         if(oAuthres.getStatusCode() == 201 || oAuthres.getStatusCode() == 200) {
+    //             return oAuthres;
+    //         }
+    //         System.debug('response' + oAuthres.getBody());
+    //     } catch(Exception ex) {
+    //         oauthError='Something Went wrong '+ex.getMessage() + 'Line Number' +ex.getLineNumber();  
+    //         System.debug('Error' + oauthError); 
+    //     }
+    //     return oAuthres;
+    // }
+
+    private static HTTPResponse getResponse(HttpRequest request, Integer counter) {
+        Http http = new Http();    
+        System.debug('check Request'+request);    
+        HTTPResponse response = http.send(request);            
+        if (System.Label.Mashery_Retry_Code.split(',').contains(String.valueOf(response.getStatusCode())) && counter == 0) {//SV-US603629
+            request.setHeader('Authorization', 'Bearer ' + getToken(true));
+            getResponse(request, 1);
+        }
+
+        return response;
+    }
+}
